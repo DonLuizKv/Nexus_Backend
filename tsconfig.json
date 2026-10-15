@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    // Layout
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    // Entorno Node ESM sin exigir extensiones .js en imports
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ES2023",
+    "resolveJsonModule": true,
+
+    // Salidas
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+
+    // Rigor
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"],
+}
