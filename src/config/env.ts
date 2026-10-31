@@ -13,7 +13,8 @@ export type EnvironmentKeys = {
         // USER: string,
         // PASSWORD: string,
         // NAME: string,
-        URL: string
+        URL: string,
+        SSL: boolean
     },
     // REDIS: {
     //     HOST: string,
@@ -50,6 +51,7 @@ export class ConfigEnv {
             // PASSWORD: this.requiredString("DB_PASSWORD"),
             // NAME: this.requiredString("DB_NAME"),
             URL: this.requiredString("DATABASE_URL"),
+            SSL: this.optionalString("DATABASE_SSL") === "true",
         };
 
         // this.REDIS = {

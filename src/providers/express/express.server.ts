@@ -6,7 +6,7 @@ import { Errors } from "../../shared/errors/Errors";
 import { Logger } from "../logs/Logger";
 import { errorsMiddleware } from "./middleware/errors.middleware";
 import { corsMiddleware } from "./middleware/cors.middleware";
-import type { PrismaClient } from "../prisma/client";
+import type { Database } from "../db/orm";
 import type { EnvironmentKeys } from "../../config/env";
 import { ScraperModule } from "../../modules/scraper/scraper.module";
 import { SeriesModule } from "../../modules/series/series.module";
@@ -17,7 +17,7 @@ import { ScrapingClient } from "../scraping/client";
 
 type ExpressServerDependencies = {
     origins: string[];
-    db: PrismaClient;
+    db: Database;
     scraperModule: ScrapingClient;
     jwt: EnvironmentKeys["JWT"];
 }
