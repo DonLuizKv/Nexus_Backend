@@ -26,7 +26,8 @@ export const users = pgTable(
 
 /**
  * One row per issued refresh token. Rotation: every refresh revokes the current row and points
- * `replaced_by_id` to the new one. Presenting a revoked token revokes the whole `family_id`.
+ * `replaced_by_id` to the new one. Reusing a rotated token within the grace window (successor still
+ * unrevoked) issues another token in the same family; any other reuse revokes the whole `family_id`.
  */
 export const refreshTokens = pgTable(
     "refresh_tokens",

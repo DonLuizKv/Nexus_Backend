@@ -41,10 +41,27 @@ query strings.
 1. `POST /auth/register` or `POST /auth/login` sets `nexus_at` and `nexus_rt`.
 2. When a request fails with `401` and `code: "TOKEN_EXPIRED"`, call `POST /auth/refresh` once and
    retry the original request. Any other `401` means "signed out".
-3. Each refresh rotates the refresh token: the old one is revoked and a new one is issued in the
-   same family. Presenting an already-rotated refresh token revokes the whole family (every device
-   that descends from that login) and returns `401 SESSION_REVOKED`.
-4. `POST /auth/logout` revokes the current refresh token and clears all three cookies.
+3. Each refresh rotates the refresh token: the old one is revoked (`revoked_at` set,
+   `replaced_by_id` pointing to its successor) and a new one is issued in the same family.
+4. Reuse grace window (30 s, `REFRESH_REUSE_GRACE_SECONDS`). Parallel requests and open tabs share
+   one `nexus_rt` cookie, so two refreshes can arrive with the same token. When the server receives
+   an already-rotated token, it decides as follows:
+   - If the token was rotated less than 30 s ago and its successor is still unrevoked, the server
+     treats it as a concurrent refresh. It answers `204` with a fresh token in the same family and
+     revokes nothing.
+   - If the token was rotated more than 30 s ago, or its successor has already been rotated or
+     revoked, the server treats it as theft. It revokes the whole family (every device that
+     descends from that login) and returns `401 SESSION_REVOKED`.
+5. Clients must single-flight refresh, so the grace window is only a safety net:
+   - Within a tab, all requests that get `TOKEN_EXPIRED` await one shared in-flight refresh promise
+     and then retry.
+   - Across tabs, wrap the refresh in a Web Lock, for example
+     `navigator.locks.request('nexus-refresh', () => fetch('/api/v1/auth/refresh', …))`. A tab that
+     waited on the lock should retry its original request first, because another tab may already
+     have set fresh cookies, and only refresh if that retry still gets `TOKEN_EXPIRED`.
+   - A socket that needs to reconnect after expiry uses the same single-flight refresh before it
+     reconnects.
+6. `POST /auth/logout` revokes the current refresh token and clears all three cookies.
 
 Passwords are hashed with argon2id.
 
@@ -100,7 +117,7 @@ The frontend shows localized text based on `code` and the field codes, not on `m
 | 400    | `BAD_REQUEST`            | Malformed JSON, unknown query parameter values, invalid cursor       |
 | 401    | `UNAUTHENTICATED`        | No valid session on an endpoint that needs one                       |
 | 401    | `TOKEN_EXPIRED`          | Access token expired; refresh and retry                              |
-| 401    | `SESSION_REVOKED`        | Refresh token missing, expired, revoked or reused                    |
+| 401    | `SESSION_REVOKED`        | Refresh token missing, expired, revoked, or reused outside the grace window |
 | 401    | `INVALID_CREDENTIALS`    | Login failed (same answer for unknown user and wrong password)       |
 | 403    | `CSRF_INVALID`           | Missing or wrong `X-CSRF-Token`                                      |
 | 403    | `ORIGIN_NOT_ALLOWED`     | `Origin`/`Referer` not in `ORIGINS`                                  |
@@ -428,7 +445,7 @@ Realtime is used only for live updates. Everything is also available over HTTP.
 - Same host as the API, default path `/socket.io`. Connect with `withCredentials: true`.
 - The handshake is authenticated with the `nexus_at` cookie, and its `Origin` must be in `ORIGINS`.
   Without a valid session the connection fails with `connect_error` and
-  `err.message === "UNAUTHENTICATED"`. Anonymous visitors use HTTP only. After a token refresh,
+  `err.message === "UNAUTHENTICATED"`. Anonymous visitors use HTTP only. After a token refresh (single-flight, see section 2),
   reconnect to pick up the new cookie.
 - Events are rate-limited per socket. Clients that flood are disconnected.
 
