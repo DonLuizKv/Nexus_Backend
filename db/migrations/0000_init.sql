@@ -1,0 +1,114 @@
+CREATE TYPE "public"."ai_target" AS ENUM('chatgpt', 'claude', 'gemini', 'llama', 'midjourney', 'claude-code', 'cursor', 'kiro', 'copilot', 'codex');--> statement-breakpoint
+CREATE TYPE "public"."entry_category" AS ENUM('escritura', 'codigo', 'imagen', 'datos', 'aprendizaje', 'negocio');--> statement-breakpoint
+CREATE TYPE "public"."entry_kind" AS ENUM('prompt', 'skill', 'agent', 'settings', 'context');--> statement-breakpoint
+CREATE TYPE "public"."entry_visibility" AS ENUM('public', 'unlisted', 'burn');--> statement-breakpoint
+CREATE TABLE "refresh_tokens" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" uuid NOT NULL,
+	"family_id" uuid NOT NULL,
+	"token_hash" char(64) NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"revoked_at" timestamp with time zone,
+	"replaced_by_id" uuid,
+	"user_agent" varchar(256),
+	"ip" varchar(45),
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "refresh_tokens_token_hash_key" UNIQUE("token_hash")
+);
+--> statement-breakpoint
+CREATE TABLE "users" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"handle" varchar(20) NOT NULL,
+	"email" varchar(254) NOT NULL,
+	"password_hash" text NOT NULL,
+	"name" varchar(60) NOT NULL,
+	"bio" varchar(160) DEFAULT '' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "users_handle_key" UNIQUE("handle"),
+	CONSTRAINT "users_email_key" UNIQUE("email"),
+	CONSTRAINT "users_handle_format" CHECK (handle ~ '^[a-z0-9._-]{3,20}$'),
+	CONSTRAINT "users_email_lowercase" CHECK (email = lower(email)),
+	CONSTRAINT "users_name_not_blank" CHECK (char_length(btrim(name)) >= 1)
+);
+--> statement-breakpoint
+CREATE TABLE "comments" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"entry_id" uuid NOT NULL,
+	"author_id" uuid NOT NULL,
+	"message" varchar(500) NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "comments_message_not_blank" CHECK (char_length(btrim(message)) >= 1)
+);
+--> statement-breakpoint
+CREATE TABLE "entries" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"slug" varchar(80) NOT NULL,
+	"author_id" uuid NOT NULL,
+	"kind" "entry_kind" NOT NULL,
+	"category" "entry_category" NOT NULL,
+	"visibility" "entry_visibility" DEFAULT 'public' NOT NULL,
+	"title" varchar(90) NOT NULL,
+	"summary" varchar(200) DEFAULT '' NOT NULL,
+	"tags" text[] DEFAULT '{}'::text[] NOT NULL,
+	"targets" "ai_target"[] NOT NULL,
+	"search_text" text DEFAULT '' NOT NULL,
+	"stars_count" integer DEFAULT 0 NOT NULL,
+	"uses_count" integer DEFAULT 0 NOT NULL,
+	"comments_count" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "entries_slug_key" UNIQUE("slug"),
+	CONSTRAINT "entries_slug_format" CHECK (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
+	CONSTRAINT "entries_title_length" CHECK (char_length(btrim(title)) >= 4),
+	CONSTRAINT "entries_tags_max" CHECK (cardinality(tags) <= 8),
+	CONSTRAINT "entries_targets_min" CHECK (cardinality(targets) >= 1),
+	CONSTRAINT "entries_counters_non_negative" CHECK (stars_count >= 0 AND uses_count >= 0 AND comments_count >= 0)
+);
+--> statement-breakpoint
+CREATE TABLE "entry_files" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"entry_id" uuid NOT NULL,
+	"position" smallint NOT NULL,
+	"path" varchar(255) NOT NULL,
+	"storage_key" varchar(512) NOT NULL,
+	"size_bytes" integer NOT NULL,
+	"sha256" char(64) NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "entry_files_storage_key_key" UNIQUE("storage_key"),
+	CONSTRAINT "entry_files_entry_position_key" UNIQUE("entry_id","position"),
+	CONSTRAINT "entry_files_entry_path_key" UNIQUE("entry_id","path"),
+	CONSTRAINT "entry_files_position_range" CHECK ("position" BETWEEN 0 AND 11),
+	CONSTRAINT "entry_files_size_range" CHECK (size_bytes BETWEEN 1 AND 200000)
+);
+--> statement-breakpoint
+CREATE TABLE "stars" (
+	"user_id" uuid NOT NULL,
+	"entry_id" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "stars_pkey" PRIMARY KEY("user_id","entry_id")
+);
+--> statement-breakpoint
+ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_replaced_by_id_refresh_tokens_id_fk" FOREIGN KEY ("replaced_by_id") REFERENCES "public"."refresh_tokens"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_entry_id_entries_id_fk" FOREIGN KEY ("entry_id") REFERENCES "public"."entries"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_author_id_users_id_fk" FOREIGN KEY ("author_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "entries" ADD CONSTRAINT "entries_author_id_users_id_fk" FOREIGN KEY ("author_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "entry_files" ADD CONSTRAINT "entry_files_entry_id_entries_id_fk" FOREIGN KEY ("entry_id") REFERENCES "public"."entries"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "stars" ADD CONSTRAINT "stars_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "stars" ADD CONSTRAINT "stars_entry_id_entries_id_fk" FOREIGN KEY ("entry_id") REFERENCES "public"."entries"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "refresh_tokens_user_id_idx" ON "refresh_tokens" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "refresh_tokens_family_id_idx" ON "refresh_tokens" USING btree ("family_id");--> statement-breakpoint
+CREATE INDEX "refresh_tokens_expires_at_idx" ON "refresh_tokens" USING btree ("expires_at");--> statement-breakpoint
+CREATE INDEX "comments_entry_created_idx" ON "comments" USING btree ("entry_id","created_at" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "entries_author_updated_idx" ON "entries" USING btree ("author_id","updated_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "entries_public_updated_idx" ON "entries" USING btree ("updated_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE visibility = 'public';--> statement-breakpoint
+CREATE INDEX "entries_public_stars_idx" ON "entries" USING btree ("stars_count" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE visibility = 'public';--> statement-breakpoint
+CREATE INDEX "entries_public_uses_idx" ON "entries" USING btree ("uses_count" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE visibility = 'public';--> statement-breakpoint
+CREATE INDEX "entries_public_kind_idx" ON "entries" USING btree ("kind","updated_at" DESC NULLS LAST) WHERE visibility = 'public';--> statement-breakpoint
+CREATE INDEX "entries_public_category_idx" ON "entries" USING btree ("category","updated_at" DESC NULLS LAST) WHERE visibility = 'public';--> statement-breakpoint
+CREATE INDEX "entries_tags_idx" ON "entries" USING gin ("tags");--> statement-breakpoint
+CREATE INDEX "entries_targets_idx" ON "entries" USING gin ("targets");--> statement-breakpoint
+CREATE INDEX "stars_entry_id_idx" ON "stars" USING btree ("entry_id");--> statement-breakpoint
+CREATE INDEX "stars_user_created_idx" ON "stars" USING btree ("user_id","created_at" DESC NULLS LAST);
