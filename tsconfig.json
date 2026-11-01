@@ -10,6 +10,8 @@
     "target": "ES2023",
     "resolveJsonModule": true,
 
+    "types": ["node", "express"],
+
     // Salidas
     "sourceMap": true,
     "declaration": true,
